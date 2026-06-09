@@ -334,6 +334,32 @@ h1 {
   background: #f1f5f9;
 }
 
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body pre {
+  padding: 12px;
+  overflow-x: auto;
+  border-radius: 8px;
+  color: #f9fafb;
+  background: #111827;
+}
+
+.markdown-body code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.markdown-body :not(pre) > code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #f3f4f6;
+}
+
 @keyframes typing-pulse {
   0%,
   80%,
