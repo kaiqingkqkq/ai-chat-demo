@@ -8,19 +8,22 @@ const app = express()//创建一个express应用
 app.use(cors())//允许前端访问后端
 app.use(express.json())//解析json请求体
 
-async function askAI(message){//定义一个异步函数，用来调用DeepSeek API
-    const apiKey = process.env.DEEPSEEK_API_KEY//从环境变量中获取DeepSeek API Key
+async function askAI(message){//定义一个异步函数，用来调用AI API
+    const apiKey = process.env.AI_API_KEY//从环境变量中获取AI API Key
     if(!apiKey){
-        throw new Error('缺少 DEEPSEEK_API_KEY,请先配置 backend/.env 文件')
+        throw new Error('缺少 AI_API_KEY,请先配置 backend/.env 文件')
     }
-    const response = await fetch('https://api.deepseek.com/chat/completions',{
+    if(!process.env.AI_API_URL){
+        throw new Error('缺少 AI_API_URL,请先配置 backend/.env 文件')
+    }
+    const response = await fetch(process.env.AI_API_URL + '/chat/completions',{
         method:'POST',
         headers:{
             Authorization:`Bearer ${apiKey}`,
             'Content-Type':'application/json'
         },
         body:JSON.stringify({
-            model:process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+            model:process.env.AI_MODEL,
             messages:[{role:'user',content:message}],
             stream:false
         })
@@ -29,7 +32,7 @@ async function askAI(message){//定义一个异步函数，用来调用DeepSeek 
     const reply = data.choices[0].message.content
     return reply
 }
-app.post('/api/chat',async (req,res)=>{
+app.post('/api',async (req,res)=>{
     // 打印前端传过来的完整请求体，方便检查 message 字段是否真的传到了后端。
     console.log('req.body =', req.body)
     
