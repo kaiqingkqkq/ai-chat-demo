@@ -454,3 +454,19 @@ h1 {
     width: 100%;
   }
 }
+
+.markdown-body pre {
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+.markdown-body code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.markdown-body :not(pre) > code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #f3f4f6;
+}

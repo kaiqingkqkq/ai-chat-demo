@@ -1,9 +1,22 @@
 <script setup>
 import { ref } from 'vue'
+import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js'
+
 const inputValue = ref('')
 const messages = ref([])
 const isSending = ref(false)
-
+const markdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  highlight(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      return `<pre class="hljs"><code>${hljs.highlight(code, { language: lang }).value}</code></pre>`
+    }
+    return `<pre class="hljs"><code>${hljs.highlightAuto(code).value}</code></pre>`
+  }
+})
 async function send() {
   const message = inputValue.value.trim()
 
@@ -60,6 +73,10 @@ function clearChat() {
   messages.value = []
   inputValue.value = ''
 }
+function renderMarkdown(content) {
+  return markdown.render(content)
+
+}
 </script>
 
 <template>
@@ -82,14 +99,17 @@ function clearChat() {
         <div v-if="messages.length === 0" class="empty-state">
           <div class="empty-icon" aria-hidden="true">AI</div>
           <h2>开始一段新对话</h2>
-          <p>输入问题后按 Enter 发送，Shift + Enter 可以换行。</p>
+          <p>输入问题后按 Enter 发送,Shift + Enter 可以换行。</p>
         </div>
 
         <div v-for="message in messages" :key="message.content" class="message-row" :class="message.role">
           <div class="message-avatar">
             {{ message.role === 'user' ? '你' : 'AI' }}
           </div>
-          <div class="message-content">
+          <div v-if="message.role === 'assistant'" class="message-content markdown-body"
+            v-html="renderMarkdown(message.content)">
+          </div>
+          <div v-else class="message-content">
             {{ message.content }}
           </div>
         </div>

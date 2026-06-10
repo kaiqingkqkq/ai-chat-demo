@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
+import 'highlight.js/styles/github.css.css'
 
 createApp(App).mount('#app')
