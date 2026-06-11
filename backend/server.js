@@ -24,7 +24,7 @@ async function askAI(message){//定义一个异步函数，用来调用AI API
         },
         body:JSON.stringify({
             model:process.env.AI_MODEL,
-            messages:[{role:'user',content:message}],
+            messages:message,
             stream:false
         })
     })
@@ -36,11 +36,14 @@ app.post('/api',async (req,res)=>{
     // 打印前端传过来的完整请求体，方便检查 message 字段是否真的传到了后端。
     console.log('req.body =', req.body)
     
-    // 从请求体中获取 message 字符串；如果没有拿到，就先给一个空字符串兜底，避免显示 undefined。
-    const message = req.body?.message || ''
+    // 从请求体中获取 messages 数组；如果没有拿到，就先给一个空数组兜底，避免显示 undefined。
+    const messages = Array.isArray(req.body?.messages)
+    ? req.body.messages
+    : [{ role: 'user', content: req.body?.message || '' }]
+
     try{
         res.json({
-            reply:await askAI(message)//返回一条ai回复
+            reply:await askAI(messages)//返回一条ai回复
         })
     }catch(error){
         res.status(500).json({

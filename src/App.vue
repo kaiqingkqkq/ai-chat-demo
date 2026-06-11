@@ -24,10 +24,11 @@ async function send() {
     return
   }
 
-  messages.value.push({
+  const userMessage = {
     role: 'user',
     content: message
-  })
+  }
+  messages.value.push(userMessage)
 
   inputValue.value = ''
   isSending.value = true
@@ -39,7 +40,10 @@ async function send() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        message
+        messages: messages.value.map(message => ({
+          role: message.role,
+          content: message.content
+        }))
       })
     })
 
@@ -85,7 +89,8 @@ function renderMarkdown(content) {
       <div class="sidebar-top">
         <div class="sidebar-brand" aria-hidden="true">
           <svg viewBox="0 0 24 24" focusable="false">
-            <path d="M12 2.5a4.2 4.2 0 0 0-3.9 2.6 4.2 4.2 0 0 0-5.3 5.2 4.2 4.2 0 0 0 1.5 6 4.2 4.2 0 0 0 6.4 3.2 4.2 4.2 0 0 0 6.5-2.6 4.2 4.2 0 0 0 4-5.8 4.2 4.2 0 0 0-3.5-5.9A4.2 4.2 0 0 0 12 2.5Zm-1.6 4.1 5.3 3.1v6.1l-5.3 3.1-5.3-3.1V9.7l5.3-3.1Zm1.6.9-4.5 2.6v5.2l4.5 2.6 4.5-2.6v-5.2L12 7.5Z" />
+            <path
+              d="M12 2.5a4.2 4.2 0 0 0-3.9 2.6 4.2 4.2 0 0 0-5.3 5.2 4.2 4.2 0 0 0 1.5 6 4.2 4.2 0 0 0 6.4 3.2 4.2 4.2 0 0 0 6.5-2.6 4.2 4.2 0 0 0 4-5.8 4.2 4.2 0 0 0-3.5-5.9A4.2 4.2 0 0 0 12 2.5Zm-1.6 4.1 5.3 3.1v6.1l-5.3 3.1-5.3-3.1V9.7l5.3-3.1Zm1.6.9-4.5 2.6v5.2l4.5 2.6 4.5-2.6v-5.2L12 7.5Z" />
           </svg>
         </div>
         <button class="sidebar-toggle" type="button" aria-label="折叠侧边栏">
