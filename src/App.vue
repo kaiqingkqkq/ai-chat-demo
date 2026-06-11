@@ -1,11 +1,13 @@
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 
 const inputValue = ref('')
 const messages = ref([])
 const isSending = ref(false)
+const messageListRef = ref(null)
+const shouldAutoScroll = ref(true)
 const markdown = new MarkdownIt({
   html: false,
   linkify: true,
@@ -17,6 +19,31 @@ const markdown = new MarkdownIt({
     return `<pre class="hljs"><code>${hljs.highlightAuto(code).value}</code></pre>`
   }
 })
+function isNearBottom(element) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 80
+}
+function updateAutoScrollState() {
+  const messageList = messageListRef.value
+
+  if (!messageList) {
+    shouldAutoScroll.value = true
+    return
+  }
+
+  shouldAutoScroll.value = isNearBottom(messageList)
+}
+async function scrollToBottom() {
+  if (!shouldAutoScroll.value) {
+    return
+  }
+
+  await nextTick()
+
+  const messageList = messageListRef.value
+  if (messageList) {
+    messageList.scrollTop = messageList.scrollHeight
+  }
+}
 async function send() {
   const message = inputValue.value.trim()
 
@@ -28,10 +55,13 @@ async function send() {
     role: 'user',
     content: message
   }
+  updateAutoScrollState()
   messages.value.push(userMessage)
+  scrollToBottom()
 
   inputValue.value = ''
   isSending.value = true
+  scrollToBottom()
 
   try {
     const response = await fetch('/api', {
@@ -53,15 +83,18 @@ async function send() {
       role: 'assistant',
       content: data.reply
     })
+    scrollToBottom()
   } catch (error) {
     messages.value.push({
       role: 'assistant',
       content: '请求后端失败，请检查后端是否启动'
     })
+    scrollToBottom()
 
     console.error(error)
   } finally {
     isSending.value = false
+    scrollToBottom()
   }
 }
 function handleKeydown(e) {
@@ -165,7 +198,7 @@ function renderMarkdown(content) {
           <h1>准备好了，随时开始</h1>
         </div>
 
-        <div v-else class="message-list">
+        <div v-else ref="messageListRef" class="message-list" @scroll="updateAutoScrollState">
           <div v-for="message in messages" :key="message.content" class="message-row" :class="message.role">
             <div class="message-avatar">
               {{ message.role === 'user' ? '你' : 'AI' }}
