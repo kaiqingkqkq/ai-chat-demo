@@ -71,7 +71,7 @@ a:focus-visible {
 
 .app-sidebar {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100vh;
   padding: 18px 8px 14px;
   border-right: 1px solid #e8e8e8;
@@ -182,6 +182,154 @@ a:focus-visible {
   line-height: 1;
 }
 
+.sidebar-history {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  margin-top: 14px;
+  padding: 12px 4px 0;
+  border-top: 1px solid #eeeeee;
+}
+
+.sidebar-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 8px 10px;
+}
+
+.sidebar-history-header h2 {
+  margin: 0;
+  color: #575757;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.sidebar-history-header button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #202020;
+  background: #eeeeee;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sidebar-history-header button:hover:not(:disabled) {
+  background: #e2e2e2;
+}
+
+.sidebar-history-header button:disabled {
+  color: #9b9b9b;
+  cursor: not-allowed;
+}
+
+.sidebar-search,
+.topic-search {
+  padding: 0 6px 10px;
+}
+
+.sidebar-search input,
+.topic-search input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #dedede;
+  border-radius: 10px;
+  color: #111111;
+  background: #ffffff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.sidebar-search input::placeholder,
+.topic-search input::placeholder {
+  color: #8a8a8a;
+}
+
+.sidebar-topic-list {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 4px 8px;
+}
+
+.sidebar-topic-item {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 68px;
+  gap: 3px;
+  padding: 9px 36px 9px 10px;
+  border-radius: 10px;
+  color: #202020;
+  background: transparent;
+  text-align: left;
+  transition: background 140ms ease;
+}
+
+.sidebar-topic-item:hover,
+.sidebar-topic-item.active {
+  background: #ececec;
+}
+
+.sidebar-topic-item:disabled {
+  color: #9b9b9b;
+  cursor: not-allowed;
+}
+
+.sidebar-topic-title,
+.sidebar-topic-summary,
+.sidebar-topic-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-topic-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sidebar-topic-summary {
+  color: #666666;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.sidebar-topic-item small {
+  color: #858585;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.topic-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  color: #696969;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.topic-delete:hover,
+.topic-delete:focus-visible {
+  color: #111111;
+  background: #dedede;
+  outline: none;
+}
+
 .login-card {
   margin: 18px 8px 0;
   padding: 22px 14px 0;
@@ -241,7 +389,7 @@ a:focus-visible {
   left: 16px;
   z-index: 20;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto 1fr;
   width: min(340px, calc(100% - 32px));
   max-height: calc(100vh - 104px);
   overflow: hidden;
@@ -308,7 +456,7 @@ a:focus-visible {
   align-items: center;
   min-height: 42px;
   gap: 10px;
-  margin: 10px 10px 0;
+  margin: 0 10px;
   padding: 0 12px;
   border-radius: 12px;
   color: #111111;
@@ -341,11 +489,12 @@ a:focus-visible {
 }
 
 .topic-item {
+  position: relative;
   display: grid;
   gap: 4px;
   width: 100%;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 74px;
+  padding: 10px 42px 10px 12px;
   border-radius: 12px;
   color: #222222;
   background: transparent;
@@ -367,10 +516,27 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.topic-item strong {
+  overflow: hidden;
+  color: #5f5f5f;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .topic-item small {
   color: #777777;
   font-size: 12px;
   line-height: 1.3;
+}
+
+.topic-empty {
+  padding: 14px 12px;
+  color: #777777;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .mobile-menu {

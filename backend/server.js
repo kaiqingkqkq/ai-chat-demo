@@ -16,7 +16,11 @@ function createSessionToken() {
     return crypto.randomBytes(24).toString('hex')
 }
 
-async function askAI(message){//定义一个异步函数，用来调用AI API
+function getStreamDelta(payload) {
+    return payload.choices?.[0]?.delta?.content || ''
+}
+
+async function streamAI(messages, res){//定义一个异步函数，用来流式调用AI API
     const apiKey = process.env.AI_API_KEY//从环境变量中获取AI API Key
     if(!apiKey){
         throw new Error('缺少 AI_API_KEY,请先配置 backend/.env 文件')
@@ -32,13 +36,55 @@ async function askAI(message){//定义一个异步函数，用来调用AI API
         },
         body:JSON.stringify({
             model:process.env.AI_MODEL,
-            messages:message,
-            stream:false
+            messages,
+            stream:true
         })
     })
-    const data = await response.json()
-    const reply = data.choices[0].message.content
-    return reply
+
+    if(!response.ok){
+        const errorText = await response.text()
+        throw new Error(errorText || `AI 服务返回 ${response.status}`)
+    }
+
+    const decoder = new TextDecoder()
+    const reader = response.body.getReader()
+    let buffer = ''
+
+    while(true){
+        const { done, value } = await reader.read()
+
+        if(done){
+            break
+        }
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for(const line of lines){
+            const trimmedLine = line.trim()
+
+            if(!trimmedLine.startsWith('data:')){
+                continue
+            }
+
+            const data = trimmedLine.slice(5).trim()
+
+            if(data === '[DONE]'){
+                return
+            }
+
+            try{
+                const delta = getStreamDelta(JSON.parse(data))
+
+                if(delta){
+                    res.write(delta)
+                }
+            }catch(error){
+                console.error('解析 AI 流式响应失败:', error)
+            }
+        }
+    }
 }
 app.post('/api',async (req,res)=>{
     // 打印前端传过来的完整请求体，方便检查 message 字段是否真的传到了后端。
@@ -50,13 +96,21 @@ app.post('/api',async (req,res)=>{
     : [{ role: 'user', content: req.body?.message || '' }]
 
     try{
-        res.json({
-            reply:await askAI(messages)//返回一条ai回复
-        })
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('X-Accel-Buffering', 'no')
+        await streamAI(messages, res)//返回流式ai回复
+        res.end()
     }catch(error){
-        res.status(500).json({
-            reply: `AI 服务调用失败：${error.message}`
-        })
+        if(!res.headersSent){
+            res.status(500).json({
+                reply: `AI 服务调用失败：${error.message}`
+            })
+            return
+        }
+
+        res.write(`\n\nAI 服务调用失败：${error.message}`)
+        res.end()
     }
 })
 app.post('/api/login',(req,res)=>{

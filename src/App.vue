@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 
@@ -12,6 +12,8 @@ const isSending = ref(false)
 const messageListRef = ref(null)
 const shouldAutoScroll = ref(true)
 const isTopicPanelOpen = ref(false)
+const searchQuery = ref('')
+const searchInputRef = ref(null)
 const isAttachmentMenuOpen = ref(false)
 const attachmentMenuRef = ref(null)
 const fileInputRef = ref(null)
@@ -35,6 +37,20 @@ const markdown = new MarkdownIt({
     return `<pre class="hljs"><code>${hljs.highlightAuto(code).value}</code></pre>`
   }
 })
+const filteredTopics = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  if (!query) {
+    return topics.value
+  }
+
+  return topics.value.filter(topic => {
+    const titleMatched = topic.title.toLowerCase().includes(query)
+    const messageMatched = topic.messages.some(message => message.content.toLowerCase().includes(query))
+
+    return titleMatched || messageMatched
+  })
+})
 function readStoredUser() {
   try {
     return JSON.parse(localStorage.getItem('authUser'))
@@ -55,7 +71,9 @@ function readStoredTopics() {
       .map(topic => ({
         id: topic.id,
         title: topic.title,
-        messages: topic.messages
+        messages: topic.messages.map(normalizeMessage),
+        createdAt: topic.createdAt || Date.now(),
+        updatedAt: topic.updatedAt || topic.createdAt || Date.now()
       }))
   } catch {
     return []
@@ -77,7 +95,23 @@ function createTopic() {
   return {
     id: `topic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: '新聊天',
-    messages: []
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+}
+function createMessage(role, content) {
+  return {
+    id: `message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    content
+  }
+}
+function normalizeMessage(message) {
+  return {
+    id: message.id || `message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    role: message.role,
+    content: message.content || ''
   }
 }
 function persistTopics() {
@@ -92,6 +126,7 @@ function syncCurrentTopicMessages() {
 
   if (topic) {
     topic.messages = messages.value
+    topic.updatedAt = Date.now()
     persistTopics()
   }
 }
@@ -103,10 +138,16 @@ function updateCurrentTopicTitle(content) {
   }
 
   topic.title = content.length > 22 ? `${content.slice(0, 22)}...` : content
+  topic.updatedAt = Date.now()
   persistTopics()
 }
 function toggleTopicPanel() {
   isTopicPanelOpen.value = !isTopicPanelOpen.value
+}
+async function openSearchPanel() {
+  isTopicPanelOpen.value = true
+  await nextTick()
+  searchInputRef.value?.focus()
 }
 function startNewChat() {
   if (isSending.value) {
@@ -142,6 +183,55 @@ function switchTopic(topicId) {
   isTopicPanelOpen.value = false
   persistTopics()
   scrollToBottom()
+}
+function deleteTopic(topicId) {
+  if (isSending.value) {
+    return
+  }
+
+  const topic = topics.value.find(topic => topic.id === topicId)
+
+  if (!topic) {
+    return
+  }
+
+  const confirmed = window.confirm(`删除“${topic.title}”？此操作只会清除本机保存的聊天记录。`)
+
+  if (!confirmed) {
+    return
+  }
+
+  topics.value = topics.value.filter(item => item.id !== topicId)
+
+  if (topics.value.length === 0) {
+    topics.value = [createTopic()]
+  }
+
+  if (currentTopicId.value === topicId) {
+    currentTopicId.value = topics.value[0].id
+    messages.value = topics.value[0].messages
+    inputValue.value = ''
+    selectedAttachments.value = []
+    shouldAutoScroll.value = true
+  }
+
+  persistTopics()
+  scrollToBottom()
+}
+function getTopicSummary(topic) {
+  const lastMessage = [...topic.messages].reverse().find(message => message.content.trim())
+
+  if (!lastMessage) {
+    return '暂无消息'
+  }
+
+  const prefix = lastMessage.role === 'user' ? '你：' : 'AI：'
+  const content = lastMessage.content.replace(/\s+/g, ' ').trim()
+
+  return `${prefix}${content}`
+}
+function getTopicMessageCount(topic) {
+  return `${topic.messages.length} 条消息`
 }
 function toggleAttachmentMenu() {
   isAttachmentMenuOpen.value = !isAttachmentMenuOpen.value
@@ -210,19 +300,26 @@ async function send() {
     return
   }
 
-  const userMessage = {
-    role: 'user',
-    content: message
-  }
+  const userMessage = createMessage('user', message)
+  const assistantMessage = createMessage('assistant', '')
+
   updateAutoScrollState()
   messages.value.push(userMessage)
   syncCurrentTopicMessages()
   updateCurrentTopicTitle(message)
   scrollToBottom()
 
+  const requestMessages = messages.value.map(message => ({
+    role: message.role,
+    content: message.content
+  }))
+  const assistantMessageIndex = messages.value.length
+
   inputValue.value = ''
   selectedAttachments.value = []
   isSending.value = true
+  messages.value.push(assistantMessage)
+  syncCurrentTopicMessages()
   scrollToBottom()
 
   try {
@@ -232,26 +329,45 @@ async function send() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        messages: messages.value.map(message => ({
-          role: message.role,
-          content: message.content
-        }))
+        messages: requestMessages
       })
     })
 
-    const data = await response.json()
+    if (!response.ok || !response.body) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.reply || '请求后端失败，请检查后端是否启动')
+    }
 
-    messages.value.push({
-      role: 'assistant',
-      content: data.reply
-    })
+    const contentType = response.headers.get('Content-Type') || ''
+
+    if (contentType.includes('application/json')) {
+      const data = await response.json()
+      messages.value[assistantMessageIndex].content = data.reply || ''
+      syncCurrentTopicMessages()
+      scrollToBottom()
+      return
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+
+    while (true) {
+      const { done, value } = await reader.read()
+
+      if (done) {
+        break
+      }
+
+      messages.value[assistantMessageIndex].content += decoder.decode(value, { stream: true })
+      syncCurrentTopicMessages()
+      scrollToBottom()
+    }
+
+    messages.value[assistantMessageIndex].content += decoder.decode()
     syncCurrentTopicMessages()
     scrollToBottom()
   } catch (error) {
-    messages.value.push({
-      role: 'assistant',
-      content: '请求后端失败，请检查后端是否启动'
-    })
+    messages.value[assistantMessageIndex].content = error.message || '请求后端失败，请检查后端是否启动'
     syncCurrentTopicMessages()
     scrollToBottom()
 
@@ -359,7 +475,7 @@ onBeforeUnmount(() => {
           <span class="nav-icon">＋</span>
           <span>新聊天</span>
         </button>
-        <button class="nav-item" type="button">
+        <button class="nav-item" type="button" @click="openSearchPanel">
           <span class="nav-icon">⌕</span>
           <span>搜索聊天</span>
         </button>
@@ -376,6 +492,54 @@ onBeforeUnmount(() => {
           <span>深度研究</span>
         </button>
       </nav>
+
+      <section class="sidebar-history" aria-label="本地会话">
+        <div class="sidebar-history-header">
+          <h2>本地会话</h2>
+          <button type="button" :disabled="isSending" @click="startNewChat">新建</button>
+        </div>
+
+        <div class="sidebar-search">
+          <label class="sr-only" for="sidebar-search-input">搜索聊天</label>
+          <input
+            id="sidebar-search-input"
+            v-model="searchQuery"
+            type="search"
+            placeholder="搜索聊天"
+            @focus="isTopicPanelOpen = true"
+          >
+        </div>
+
+        <div class="sidebar-topic-list">
+          <article v-if="filteredTopics.length === 0" class="topic-empty">
+            没有找到匹配的会话
+          </article>
+          <button
+            v-for="topic in filteredTopics"
+            :key="topic.id"
+            class="sidebar-topic-item"
+            :class="{ active: topic.id === currentTopicId }"
+            type="button"
+            :disabled="isSending && topic.id !== currentTopicId"
+            @click="switchTopic(topic.id)"
+          >
+            <span class="sidebar-topic-title">{{ topic.title }}</span>
+            <span class="sidebar-topic-summary">{{ getTopicSummary(topic) }}</span>
+            <small>{{ getTopicMessageCount(topic) }}</small>
+            <span
+              class="topic-delete"
+              role="button"
+              tabindex="0"
+              aria-label="删除会话"
+              @click.stop="deleteTopic(topic.id)"
+              @keydown.enter.stop.prevent="deleteTopic(topic.id)"
+              @keydown.space.stop.prevent="deleteTopic(topic.id)"
+            >
+              ×
+            </span>
+          </button>
+        </div>
+      </section>
 
       <div class="sidebar-footer">
         <button class="nav-item" type="button">
@@ -418,10 +582,21 @@ onBeforeUnmount(() => {
       <aside class="topic-panel" :class="{ open: isTopicPanelOpen }" aria-label="历史话题">
         <div class="topic-panel-header">
           <div>
-            <h2>历史话题</h2>
-            <p>选择一个话题继续聊天</p>
+            <h2>本地会话</h2>
+            <p>搜索、切换或删除本机保存的聊天</p>
           </div>
           <button type="button" aria-label="关闭历史话题" @click="toggleTopicPanel">×</button>
+        </div>
+
+        <div class="topic-search">
+          <label class="sr-only" for="topic-search-input">搜索聊天</label>
+          <input
+            id="topic-search-input"
+            ref="searchInputRef"
+            v-model="searchQuery"
+            type="search"
+            placeholder="搜索标题或聊天内容"
+          >
         </div>
 
         <button class="topic-new-button" type="button" :disabled="isSending" @click="startNewChat">
@@ -430,8 +605,11 @@ onBeforeUnmount(() => {
         </button>
 
         <div class="topic-list">
+          <article v-if="filteredTopics.length === 0" class="topic-empty">
+            没有找到匹配的会话，换个关键词试试。
+          </article>
           <button
-            v-for="topic in topics"
+            v-for="topic in filteredTopics"
             :key="topic.id"
             class="topic-item"
             :class="{ active: topic.id === currentTopicId }"
@@ -439,7 +617,19 @@ onBeforeUnmount(() => {
             @click="switchTopic(topic.id)"
           >
             <span>{{ topic.title }}</span>
-            <small>{{ topic.messages.length }} 条消息</small>
+            <strong>{{ getTopicSummary(topic) }}</strong>
+            <small>{{ getTopicMessageCount(topic) }}</small>
+            <span
+              class="topic-delete"
+              role="button"
+              tabindex="0"
+              aria-label="删除会话"
+              @click.stop="deleteTopic(topic.id)"
+              @keydown.enter.stop.prevent="deleteTopic(topic.id)"
+              @keydown.space.stop.prevent="deleteTopic(topic.id)"
+            >
+              ×
+            </span>
           </button>
         </div>
       </aside>
@@ -450,25 +640,21 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else ref="messageListRef" class="message-list" @scroll="updateAutoScrollState">
-          <div v-for="message in messages" :key="message.content" class="message-row" :class="message.role">
+          <div v-for="message in messages" :key="message.id" class="message-row" :class="message.role">
             <div class="message-avatar">
               {{ message.role === 'user' ? '你' : 'AI' }}
             </div>
-            <div v-if="message.role === 'assistant'" class="message-content markdown-body"
+            <div v-if="message.role === 'assistant' && message.content" class="message-content markdown-body"
               v-html="renderMarkdown(message.content)">
             </div>
-            <div v-else class="message-content">
-              {{ message.content }}
-            </div>
-          </div>
-
-          <div v-if="isSending" class="message-row assistant">
-            <div class="message-avatar">AI</div>
-            <div class="message-content typing-content">
+            <div v-else-if="message.role === 'assistant'" class="message-content typing-content">
               <span>AI 正在思考</span>
               <span class="typing-dot"></span>
               <span class="typing-dot"></span>
               <span class="typing-dot"></span>
+            </div>
+            <div v-else class="message-content">
+              {{ message.content }}
             </div>
           </div>
         </div>
