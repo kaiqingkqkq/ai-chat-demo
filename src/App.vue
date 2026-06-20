@@ -1,13 +1,22 @@
 <script setup>
-import { nextTick, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 
 const inputValue = ref('')
-const messages = ref([])
+const storedTopics = readStoredTopics()
+const topics = ref(storedTopics.length > 0 ? storedTopics : [createTopic()])
+const currentTopicId = ref(readStoredTopicId(topics.value))
+const messages = ref(getInitialTopicMessages(topics.value, currentTopicId.value))
 const isSending = ref(false)
 const messageListRef = ref(null)
 const shouldAutoScroll = ref(true)
+const isTopicPanelOpen = ref(false)
+const isAttachmentMenuOpen = ref(false)
+const attachmentMenuRef = ref(null)
+const fileInputRef = ref(null)
+const imageInputRef = ref(null)
+const selectedAttachments = ref([])
 const currentView = ref('chat')
 const loginEmail = ref('')
 const loginPassword = ref('')
@@ -32,6 +41,142 @@ function readStoredUser() {
   } catch {
     return null
   }
+}
+function readStoredTopics() {
+  try {
+    const storedTopics = JSON.parse(localStorage.getItem('chatTopics'))
+
+    if (!Array.isArray(storedTopics)) {
+      return []
+    }
+
+    return storedTopics
+      .filter(topic => topic?.id && topic?.title && Array.isArray(topic?.messages))
+      .map(topic => ({
+        id: topic.id,
+        title: topic.title,
+        messages: topic.messages
+      }))
+  } catch {
+    return []
+  }
+}
+function readStoredTopicId(topics) {
+  const storedTopicId = localStorage.getItem('currentTopicId')
+
+  if (topics.some(topic => topic.id === storedTopicId)) {
+    return storedTopicId
+  }
+
+  return topics[0].id
+}
+function getInitialTopicMessages(topics, topicId) {
+  return topics.find(topic => topic.id === topicId)?.messages || topics[0].messages
+}
+function createTopic() {
+  return {
+    id: `topic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: '新聊天',
+    messages: []
+  }
+}
+function persistTopics() {
+  localStorage.setItem('chatTopics', JSON.stringify(topics.value))
+  localStorage.setItem('currentTopicId', currentTopicId.value)
+}
+function getCurrentTopic() {
+  return topics.value.find(topic => topic.id === currentTopicId.value)
+}
+function syncCurrentTopicMessages() {
+  const topic = getCurrentTopic()
+
+  if (topic) {
+    topic.messages = messages.value
+    persistTopics()
+  }
+}
+function updateCurrentTopicTitle(content) {
+  const topic = getCurrentTopic()
+
+  if (!topic || topic.title !== '新聊天') {
+    return
+  }
+
+  topic.title = content.length > 22 ? `${content.slice(0, 22)}...` : content
+  persistTopics()
+}
+function toggleTopicPanel() {
+  isTopicPanelOpen.value = !isTopicPanelOpen.value
+}
+function startNewChat() {
+  if (isSending.value) {
+    return
+  }
+
+  const topic = createTopic()
+  topics.value.unshift(topic)
+  currentTopicId.value = topic.id
+  messages.value = topic.messages
+  inputValue.value = ''
+  selectedAttachments.value = []
+  shouldAutoScroll.value = true
+  isTopicPanelOpen.value = false
+  persistTopics()
+}
+function switchTopic(topicId) {
+  if (isSending.value) {
+    return
+  }
+
+  const topic = topics.value.find(topic => topic.id === topicId)
+
+  if (!topic) {
+    return
+  }
+
+  currentTopicId.value = topic.id
+  messages.value = topic.messages
+  inputValue.value = ''
+  selectedAttachments.value = []
+  shouldAutoScroll.value = true
+  isTopicPanelOpen.value = false
+  persistTopics()
+  scrollToBottom()
+}
+function toggleAttachmentMenu() {
+  isAttachmentMenuOpen.value = !isAttachmentMenuOpen.value
+}
+function handlePageClick(event) {
+  if (!isAttachmentMenuOpen.value) {
+    return
+  }
+
+  if (attachmentMenuRef.value?.contains(event.target)) {
+    return
+  }
+
+  isAttachmentMenuOpen.value = false
+}
+function openFilePicker() {
+  isAttachmentMenuOpen.value = false
+  fileInputRef.value?.click()
+}
+function openImagePicker() {
+  isAttachmentMenuOpen.value = false
+  imageInputRef.value?.click()
+}
+function handleAttachmentSelect(event, type) {
+  const files = Array.from(event.target.files || [])
+
+  selectedAttachments.value = files.map(file => ({
+    name: file.name,
+    type,
+    size: file.size
+  }))
+  event.target.value = ''
+}
+function removeAttachment(index) {
+  selectedAttachments.value.splice(index, 1)
 }
 function isNearBottom(element) {
   return element.scrollHeight - element.scrollTop - element.clientHeight < 80
@@ -71,9 +216,12 @@ async function send() {
   }
   updateAutoScrollState()
   messages.value.push(userMessage)
+  syncCurrentTopicMessages()
+  updateCurrentTopicTitle(message)
   scrollToBottom()
 
   inputValue.value = ''
+  selectedAttachments.value = []
   isSending.value = true
   scrollToBottom()
 
@@ -97,12 +245,14 @@ async function send() {
       role: 'assistant',
       content: data.reply
     })
+    syncCurrentTopicMessages()
     scrollToBottom()
   } catch (error) {
     messages.value.push({
       role: 'assistant',
       content: '请求后端失败，请检查后端是否启动'
     })
+    syncCurrentTopicMessages()
     scrollToBottom()
 
     console.error(error)
@@ -112,6 +262,10 @@ async function send() {
   }
 }
 function handleKeydown(e) {
+  if (e.isComposing || e.keyCode === 229) {
+    return
+  }
+
   if (e.key === 'Enter' && e.shiftKey === false) {
     e.preventDefault()// 阻止默认换行
     send()
@@ -121,8 +275,7 @@ function clearChat() {
   if (isSending.value) {
     return
   }
-  messages.value = []
-  inputValue.value = ''
+  startNewChat()
 }
 function showLoginPage() {
   currentView.value = 'login'
@@ -177,6 +330,12 @@ function renderMarkdown(content) {
   return markdown.render(content)
 
 }
+onMounted(() => {
+  document.addEventListener('click', handlePageClick)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handlePageClick)
+})
 </script>
 
 <template>
@@ -189,7 +348,7 @@ function renderMarkdown(content) {
               d="M12 2.5a4.2 4.2 0 0 0-3.9 2.6 4.2 4.2 0 0 0-5.3 5.2 4.2 4.2 0 0 0 1.5 6 4.2 4.2 0 0 0 6.4 3.2 4.2 4.2 0 0 0 6.5-2.6 4.2 4.2 0 0 0 4-5.8 4.2 4.2 0 0 0-3.5-5.9A4.2 4.2 0 0 0 12 2.5Zm-1.6 4.1 5.3 3.1v6.1l-5.3 3.1-5.3-3.1V9.7l5.3-3.1Zm1.6.9-4.5 2.6v5.2l4.5 2.6 4.5-2.6v-5.2L12 7.5Z" />
           </svg>
         </div>
-        <button class="sidebar-toggle" type="button" aria-label="折叠侧边栏">
+        <button class="sidebar-toggle" type="button" aria-label="打开历史话题" @click="toggleTopicPanel">
           <span></span>
           <span></span>
         </button>
@@ -242,13 +401,12 @@ function renderMarkdown(content) {
 
     <section class="chat-main">
       <header class="chat-header">
-        <button class="mobile-menu" type="button" aria-label="打开菜单">
+        <button class="mobile-menu" type="button" aria-label="打开历史话题" @click="toggleTopicPanel">
           <span></span>
           <span></span>
         </button>
         <button class="model-button" type="button">
-          <span>ChatGPT</span>
-          <span class="chevron">⌄</span>
+          <span>KQChat</span>
         </button>
         <div class="auth-actions">
           <button v-if="!currentUser" class="login-button" type="button" @click="showLoginPage">登录</button>
@@ -256,6 +414,35 @@ function renderMarkdown(content) {
           <button class="signup-button" type="button">免费注册</button>
         </div>
       </header>
+
+      <aside class="topic-panel" :class="{ open: isTopicPanelOpen }" aria-label="历史话题">
+        <div class="topic-panel-header">
+          <div>
+            <h2>历史话题</h2>
+            <p>选择一个话题继续聊天</p>
+          </div>
+          <button type="button" aria-label="关闭历史话题" @click="toggleTopicPanel">×</button>
+        </div>
+
+        <button class="topic-new-button" type="button" :disabled="isSending" @click="startNewChat">
+          <span>＋</span>
+          新聊天
+        </button>
+
+        <div class="topic-list">
+          <button
+            v-for="topic in topics"
+            :key="topic.id"
+            class="topic-item"
+            :class="{ active: topic.id === currentTopicId }"
+            type="button"
+            @click="switchTopic(topic.id)"
+          >
+            <span>{{ topic.title }}</span>
+            <small>{{ topic.messages.length }} 条消息</small>
+          </button>
+        </div>
+      </aside>
 
       <div class="chat-body">
         <div v-if="messages.length === 0" class="empty-state">
@@ -288,8 +475,36 @@ function renderMarkdown(content) {
       </div>
 
       <footer class="chat-composer">
-        <div class="chat-input-area">
-          <button class="add-button" type="button" aria-label="添加内容">＋</button>
+        <div class="composer-stack">
+          <div v-if="selectedAttachments.length > 0" class="attachment-list">
+            <div v-for="(attachment, index) in selectedAttachments" :key="`${attachment.name}-${index}`" class="attachment-chip">
+              <span>{{ attachment.type === 'image' ? '照片' : '文件' }}</span>
+              <strong>{{ attachment.name }}</strong>
+              <button type="button" aria-label="移除附件" @click="removeAttachment(index)">×</button>
+            </div>
+          </div>
+
+          <div ref="attachmentMenuRef" class="chat-input-area">
+          <button class="add-button" type="button" aria-label="添加内容" @click="toggleAttachmentMenu">＋</button>
+          <div v-if="isAttachmentMenuOpen" class="attachment-menu open">
+            <button type="button" @click="openFilePicker">上传文件</button>
+            <button type="button" @click="openImagePicker">上传照片</button>
+          </div>
+          <input
+            ref="fileInputRef"
+            class="file-input-hidden"
+            type="file"
+            multiple
+            @change="handleAttachmentSelect($event, 'file')"
+          >
+          <input
+            ref="imageInputRef"
+            class="file-input-hidden"
+            type="file"
+            accept="image/*"
+            multiple
+            @change="handleAttachmentSelect($event, 'image')"
+          >
           <label class="sr-only" for="chat-input">输入消息</label>
           <textarea id="chat-input" v-model="inputValue" rows="1" placeholder="有问题，尽管问" :disabled="isSending"
             @keydown="handleKeydown"></textarea>
@@ -305,6 +520,7 @@ function renderMarkdown(content) {
           <button class="send-button" :disabled="!inputValue.trim() || isSending" @click="send">
             {{ isSending ? '发送中' : '发送' }}
           </button>
+          </div>
         </div>
         <p class="legal-copy">
           ChatGPT 是 AI。使用即表示你同意我们的条款和隐私政策。聊天内容可能会被审核，并用于改进我们的 AI 模型。
