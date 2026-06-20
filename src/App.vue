@@ -8,6 +8,13 @@ const messages = ref([])
 const isSending = ref(false)
 const messageListRef = ref(null)
 const shouldAutoScroll = ref(true)
+const currentView = ref('chat')
+const loginEmail = ref('')
+const loginPassword = ref('')
+const loginNotice = ref('')
+const loginNoticeType = ref('info')
+const isLoggingIn = ref(false)
+const currentUser = ref(readStoredUser())
 const markdown = new MarkdownIt({
   html: false,
   linkify: true,
@@ -19,6 +26,13 @@ const markdown = new MarkdownIt({
     return `<pre class="hljs"><code>${hljs.highlightAuto(code).value}</code></pre>`
   }
 })
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('authUser'))
+  } catch {
+    return null
+  }
+}
 function isNearBottom(element) {
   return element.scrollHeight - element.scrollTop - element.clientHeight < 80
 }
@@ -110,6 +124,55 @@ function clearChat() {
   messages.value = []
   inputValue.value = ''
 }
+function showLoginPage() {
+  currentView.value = 'login'
+  loginNotice.value = ''
+  loginNoticeType.value = 'info'
+}
+function showChatPage() {
+  currentView.value = 'chat'
+}
+async function handleLoginSubmit() {
+  if (isLoggingIn.value) {
+    return
+  }
+
+  loginNotice.value = ''
+  loginNoticeType.value = 'info'
+  isLoggingIn.value = true
+
+  try {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: loginEmail.value.trim(),
+        password: loginPassword.value
+      })
+    })
+    const data = await response.json()
+
+    if (!response.ok) {
+      loginNotice.value = data.message || '登录失败，请检查邮箱和密码'
+      loginNoticeType.value = 'error'
+      return
+    }
+
+    localStorage.setItem('authToken', data.token)
+    localStorage.setItem('authUser', JSON.stringify(data.user))
+    currentUser.value = data.user
+    loginPassword.value = ''
+    currentView.value = 'chat'
+  } catch (error) {
+    loginNotice.value = '登录请求失败，请检查后端是否启动'
+    loginNoticeType.value = 'error'
+    console.error(error)
+  } finally {
+    isLoggingIn.value = false
+  }
+}
 function renderMarkdown(content) {
   return markdown.render(content)
 
@@ -117,7 +180,7 @@ function renderMarkdown(content) {
 </script>
 
 <template>
-  <main class="chat-page">
+  <main v-if="currentView === 'chat'" class="chat-page">
     <aside class="app-sidebar" aria-label="侧边导航">
       <div class="sidebar-top">
         <div class="sidebar-brand" aria-hidden="true">
@@ -172,7 +235,7 @@ function renderMarkdown(content) {
         <div class="login-card">
           <h2>获取为你量身定制的回复</h2>
           <p>登录以获取基于已保存聊天的回答，并可创建图片和上传文件。</p>
-          <button type="button">登录</button>
+          <button type="button" @click="showLoginPage">登录</button>
         </div>
       </div>
     </aside>
@@ -188,7 +251,8 @@ function renderMarkdown(content) {
           <span class="chevron">⌄</span>
         </button>
         <div class="auth-actions">
-          <button class="login-button" type="button">登录</button>
+          <button v-if="!currentUser" class="login-button" type="button" @click="showLoginPage">登录</button>
+          <button v-else class="user-button" type="button">{{ currentUser.email }}</button>
           <button class="signup-button" type="button">免费注册</button>
         </div>
       </header>
@@ -247,6 +311,55 @@ function renderMarkdown(content) {
           <a href="#">了解更多</a>
         </p>
       </footer>
+    </section>
+  </main>
+
+  <main v-else class="login-page">
+    <button class="login-back-button" type="button" @click="showChatPage">
+      返回 ChatGPT
+    </button>
+
+    <section class="login-panel" aria-labelledby="login-title">
+      <div class="login-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path
+            d="M12 2.5a4.2 4.2 0 0 0-3.9 2.6 4.2 4.2 0 0 0-5.3 5.2 4.2 4.2 0 0 0 1.5 6 4.2 4.2 0 0 0 6.4 3.2 4.2 4.2 0 0 0 6.5-2.6 4.2 4.2 0 0 0 4-5.8 4.2 4.2 0 0 0-3.5-5.9A4.2 4.2 0 0 0 12 2.5Zm-1.6 4.1 5.3 3.1v6.1l-5.3 3.1-5.3-3.1V9.7l5.3-3.1Zm1.6.9-4.5 2.6v5.2l4.5 2.6 4.5-2.6v-5.2L12 7.5Z" />
+        </svg>
+      </div>
+
+      <h1 id="login-title">欢迎回来</h1>
+      <p class="login-summary">登录后可保存聊天记录，并在不同设备间继续对话。</p>
+
+      <form class="login-form" @submit.prevent="handleLoginSubmit">
+        <label for="login-email">邮箱地址</label>
+        <input id="login-email" v-model="loginEmail" type="email" autocomplete="email" placeholder="name@example.com"
+          required>
+
+        <label for="login-password">密码</label>
+        <input id="login-password" v-model="loginPassword" type="password" autocomplete="current-password"
+          placeholder="输入密码" required>
+
+        <button class="login-submit-button" type="submit" :disabled="isLoggingIn">
+          {{ isLoggingIn ? '登录中...' : '登录' }}
+        </button>
+      </form>
+
+      <p v-if="loginNotice" class="login-notice" :class="loginNoticeType">{{ loginNotice }}</p>
+
+      <div class="login-divider">
+        <span>或</span>
+      </div>
+
+      <div class="login-provider-list">
+        <button type="button">使用 Google 登录</button>
+        <button type="button">使用 Microsoft 登录</button>
+        <button type="button">使用 Apple 登录</button>
+      </div>
+
+      <p class="login-switch">
+        还没有账号？
+        <button type="button">免费注册</button>
+      </p>
     </section>
   </main>
 </template>

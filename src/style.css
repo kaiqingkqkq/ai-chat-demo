@@ -39,6 +39,7 @@ button:not(:disabled) {
 
 button:focus-visible,
 textarea:focus-visible,
+input:focus-visible,
 a:focus-visible {
   outline: 2px solid #111111;
   outline-offset: 3px;
@@ -264,7 +265,8 @@ a:focus-visible {
 }
 
 .login-button,
-.signup-button {
+.signup-button,
+.user-button {
   min-height: 42px;
   padding: 0 20px;
   border-radius: 999px;
@@ -288,6 +290,20 @@ a:focus-visible {
 }
 
 .signup-button:hover {
+  background: #f7f7f7;
+}
+
+.user-button {
+  max-width: 220px;
+  overflow: hidden;
+  border: 1px solid #dddddd;
+  color: #1f1f1f;
+  background: #ffffff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-button:hover {
   background: #f7f7f7;
 }
 
@@ -563,6 +579,188 @@ a:focus-visible {
   background: #f0f0f0;
 }
 
+.login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 56px 24px;
+  background: #ffffff;
+}
+
+.login-back-button {
+  position: fixed;
+  top: 22px;
+  left: 24px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #dddddd;
+  border-radius: 999px;
+  color: #262626;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login-back-button:hover {
+  background: #f5f5f5;
+}
+
+.login-panel {
+  width: min(100%, 420px);
+  text-align: center;
+}
+
+.login-logo {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  margin-bottom: 28px;
+  color: #111111;
+}
+
+.login-logo svg {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+}
+
+.login-panel h1 {
+  margin: 0;
+  color: #111111;
+  font-size: 32px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.login-summary {
+  margin: 12px 0 30px;
+  color: #666666;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.login-form {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.login-form label {
+  color: #333333;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login-form input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 15px;
+  border: 1px solid #d7d7d7;
+  border-radius: 12px;
+  color: #111111;
+  background: #ffffff;
+  font: inherit;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.login-form input::placeholder {
+  color: #8a8a8a;
+}
+
+.login-form input:focus {
+  border-color: #111111;
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 8%);
+  outline: none;
+}
+
+.login-submit-button {
+  min-height: 52px;
+  margin-top: 8px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #10a37f;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.login-submit-button:hover {
+  background: #0d8f70;
+}
+
+.login-submit-button:disabled {
+  background: #8fcfbd;
+  cursor: not-allowed;
+}
+
+.login-notice {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #d9eee8;
+  border-radius: 10px;
+  color: #0f6b57;
+  background: #f2fbf8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.login-notice.error {
+  border-color: #f4c7c7;
+  color: #a21818;
+  background: #fff5f5;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 28px 0 18px;
+  color: #777777;
+  font-size: 14px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  height: 1px;
+  flex: 1;
+  background: #e7e7e7;
+  content: "";
+}
+
+.login-provider-list {
+  display: grid;
+  gap: 10px;
+}
+
+.login-provider-list button {
+  min-height: 50px;
+  border: 1px solid #d9d9d9;
+  border-radius: 999px;
+  color: #222222;
+  background: #ffffff;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.login-provider-list button:hover {
+  background: #f6f6f6;
+}
+
+.login-switch {
+  margin: 24px 0 0;
+  color: #666666;
+  font-size: 14px;
+}
+
+.login-switch button {
+  padding: 0;
+  color: #0d8f70;
+  background: transparent;
+  font-weight: 700;
+}
+
 @keyframes typing-pulse {
   0%,
   80%,
@@ -614,7 +812,8 @@ a:focus-visible {
   }
 
   .login-button,
-  .signup-button {
+  .signup-button,
+  .user-button {
     min-height: 38px;
     padding: 0 14px;
     font-size: 14px;
@@ -681,5 +880,19 @@ a:focus-visible {
 
   .chat-input-area textarea {
     font-size: 16px;
+  }
+
+  .login-page {
+    align-items: start;
+    padding: 82px 20px 32px;
+  }
+
+  .login-back-button {
+    top: 16px;
+    left: 16px;
+  }
+
+  .login-panel h1 {
+    font-size: 28px;
   }
 }
